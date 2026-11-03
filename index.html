@@ -143,6 +143,14 @@
   .equip-origin { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; }
   .equip-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 12.5px; margin-bottom: 8px; }
   .equip-stats div b { display: block; font-size: 14px; font-family: "Montserrat",sans-serif; }
+  .equip-stats div input.eq-unidades-input {
+  display: block; width: 58px; margin-top: 1px; font-size: 14px; font-weight: 700; font-family: "Montserrat",sans-serif;
+  border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; background: var(--surface); color: var(--fg);
+  -moz-appearance: textfield; appearance: textfield;
+  }
+.equip-stats div input.eq-unidades-input::-webkit-outer-spin-button,
+.equip-stats div input.eq-unidades-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.equip-stats div input.eq-unidades-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
   .equip-avail { font-size: 11px; color: var(--muted); line-height: 1.3; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 2px; }
 
   /* layout: inputs + results */
@@ -270,7 +278,7 @@
         <div class="equip-stats">
           <div>Potencia<b id="eqKw"></b></div>
           <div>Capacidad<b id="eqCap"></b></div>
-          <div>Equipos en flota<b id="eqUnidades"></b></div>
+          <div>Equipos en flota<input type="number" id="eqUnidadesInput" class="eq-unidades-input" min="0" step="1"></div>
           <div>CAPEX total<b id="eqCapexTotal"></b></div>
         </div>
         <div class="equip-avail" id="eqAvail"></div>
@@ -625,13 +633,13 @@
     state.inp.ritmoCompra = v;
     render();
   });
-  document.getElementById("eqPrecioInput").addEventListener("input", (e) => {
-    let v = parseFloat(e.target.value);
-    if (isNaN(v)) return;
-    state.equipos[state.equipoKey].precioNativo = v;
-    render();
-  });
-
+  document.getElementById("eqUnidadesInput").addEventListener("input", (e) => {
+  let v = parseInt(e.target.value, 10);
+  if (isNaN(v) || v < 0) return;
+  const key = state.equipoKey;
+  state.equipos[key].cohortes = buildCohortesPadded(v, state.inp.ritmoCompra, COHORT_ROWS);
+  render();
+});
   function syncScheduleInputs() {
     const h = document.getElementById("horasEfectivasInput");
     const r = document.getElementById("ritmoCompraInput");
@@ -663,7 +671,8 @@
     if (document.activeElement !== precioInput) precioInput.value = eq.precioNativo;
     document.getElementById("eqKw").textContent = eq.kw.toLocaleString("es-CL",{maximumFractionDigits:1}) + " kW";
     document.getElementById("eqCap").textContent = eq.tphUnidad + " t/h";
-    document.getElementById("eqUnidades").textContent = res.unidades;
+    const unidadesInput = document.getElementById("eqUnidadesInput");
+    if (document.activeElement !== unidadesInput) unidadesInput.value = res.unidades;
     document.getElementById("eqCapexTotal").textContent = fmtCLPmm(res.totalCapex);
     document.getElementById("eqAvail").textContent = eq.disponibilidad;
   }
