@@ -253,7 +253,7 @@
 <div class="hero gutter">
   <div class="hero-inner">
     <div class="hero-text">
-      <span class="hero-eyebrow">MPM · Servicio Chancado Móvil de Pebbles · Teck Quebrada Blanca</span>
+      <span class="hero-eyebrow">MPM · Evaluación Técnico-Económica de un Modelo de Negocio para Servicios de Chancado Móvil de Pebbles</span>
       <h1>Calculadora de Factibilidad Técnico-Económica</h1>
       <p>Compara Astec FT200CC, RM120X y Trakpactor 320SR bajo el mismo esquema de financiamiento 100% leasing, con compra escalonada de la flota. Ajusta los supuestos y revisa en vivo el VAN, la TIR y el payback de cada alternativa.</p>
     </div>
@@ -265,7 +265,7 @@
 
   <section class="card">
     <div class="section-title">1 · Selección de equipo y calendario de compra (leasing)</div>
-    <div class="section-sub">Compara Astec FT200CC, RM120X y Trakpactor 320SR bajo el mismo esquema de financiamiento. Cambia de pestaña para ver el flujo completo de cada alternativa — todas comparten tasa, plazo y valor residual del leasing.</div>
+    <div class="section-sub">Compara Astec FT200CC, RM120X y Trakpactor 320SR bajo el mismo esquema de financiamiento. Cambia de pestaña para ver el flujo completo de cada alternativa.</div>
     <div class="tabs" id="equipTabs"></div>
     <div class="two-col">
       <div class="equip-card">
@@ -310,7 +310,7 @@
   <div class="layout-grid">
     <section class="card" id="inputsCard">
       <div class="section-title">2 · Supuestos del modelo</div>
-      <div class="section-sub">Compartidos entre los tres equipos — edita cualquier valor para correr sensibilidad.</div>
+      <div class="section-sub">Edita cualquier valor para correr sensibilidad.</div>
       <form id="inputsForm"></form>
       <button class="reset-btn" id="resetBtn" type="button">Restablecer valores validados</button>
     </section>
@@ -565,7 +565,7 @@
     ]},
     { legend: "Financiamiento (leasing)", fields: [
       { key:"pctResidual", label:"Valor residual / opción de compra", hint:"% del valor del equipo", pct:true, step:0.5 },
-      { key:"tasaInteresLeasing", label:"Tasa de interés leasing", hint:"anual", pct:true, step:0.1 },
+      { key:"tasaInteresLeasing", label:"Tasa de interés leasing", hint:"anual %", pct:true, step:0.1 },
       { key:"plazoLeasing", label:"Plazo leasing", hint:"años por equipo", step:1 },
     ]},
     { legend: "Depreciación e impuestos", fields: [
