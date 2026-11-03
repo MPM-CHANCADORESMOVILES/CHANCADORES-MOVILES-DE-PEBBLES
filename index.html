@@ -293,6 +293,10 @@
             <label><span>Ritmo sugerido</span><span class="hint">equipos/año</span></label>
             <input type="number" id="ritmoCompraInput" step="1" min="1">
           </div>
+          <div class="field">
+            <label><span>Ventana del calendario</span><span class="hint">años editables</span></label>
+            <input type="number" id="aniosCalendarioInput" step="1" min="1">
+          </div>
         </div>
         <button class="reset-btn" id="regenBtn" type="button" style="margin-bottom:10px;">Generar calendario sugerido para este equipo</button>
         <div class="field-note" id="scheduleExplain"></div>
@@ -385,7 +389,7 @@
   }
 
   // calendario de compra sugerido: N equipos por año hasta completar la flota (punto de partida editable)
-  const COHORT_ROWS = 10; // años 0..9 de margen para comprar — suficiente para cualquier flota razonable
+  const COHORT_ROWS_DEFAULT = 10; // solo fija el valor inicial; la ventana real vive en state.inp.aniosCalendario;
   function buildCohortesAuto(totalUnidades, ritmo) {
     const r = Math.max(1, Math.round(ritmo) || 1);
     const cohortes = [];
@@ -511,6 +515,7 @@
     plazoLeasing: 3,
     horasEfectivas: 3672,
     ritmoCompra: 2,
+    aniosCalendario: COHORT_ROWS_DEFAULT,
     tcUsdClp: 977,
     tcEurUsd: 1.10,
   };
@@ -518,7 +523,7 @@
   function defaultCohortesFor(tphUnidad) {
     const requiredTph = DEFAULTS_INP.capacidadPlena / DEFAULTS_INP.horasEfectivas;
     const sugeridas = Math.max(1, Math.ceil(requiredTph / tphUnidad));
-    return buildCohortesPadded(sugeridas, DEFAULTS_INP.ritmoCompra, COHORT_ROWS);
+    return buildCohortesPadded(sugeridas, DEFAULTS_INP.ritmoCompra, DEFAULTS_INP.aniosCalendario);
   }
 
   const DEFAULTS_EQUIPOS = {
@@ -529,6 +534,7 @@
   const EQUIP_ORDER = ["trakpactor", "astec", "rm120x"];
 
   let state = {
+    let lastBuiltAnios = null; // para reconstruir la tabla solo cuando cambia la ventana de años
     equipoKey: "trakpactor",
     inp: JSON.parse(JSON.stringify(DEFAULTS_INP)),
     equipos: JSON.parse(JSON.stringify(DEFAULTS_EQUIPOS)),
@@ -634,17 +640,37 @@
     render();
   });
   document.getElementById("eqUnidadesInput").addEventListener("input", (e) => {
-  let v = parseInt(e.target.value, 10);
-  if (isNaN(v) || v < 0) return;
-  const key = state.equipoKey;
-  state.equipos[key].cohortes = buildCohortesPadded(v, state.inp.ritmoCompra, COHORT_ROWS);
-  render();
-});
+    let v = parseInt(e.target.value, 10);
+    if (isNaN(v) || v < 0) return;
+    const key = state.equipoKey;
+    state.equipos[key].cohortes = buildCohortesPadded(v, state.inp.ritmoCompra, state.inp.aniosCalendario);
+    render();
+  });
+  document.getElementById("aniosCalendarioInput").addEventListener("input", (e) => {
+    let v = parseInt(e.target.value, 10);
+    if (isNaN(v) || v < 1) return;
+    state.inp.aniosCalendario = v;
+    resizeAllCohortes(v);
+    render();
+  });
+
+  function resizeAllCohortes(newLength) {
+    EQUIP_ORDER.forEach(key => {
+      const old = state.equipos[key].cohortes;
+      state.equipos[key].cohortes = Array.from({ length: newLength }, (_, i) => ({
+        anio: i,
+        cantidad: old[i] ? old[i].cantidad : 0,
+      }));
+    });
+  }
+
   function syncScheduleInputs() {
     const h = document.getElementById("horasEfectivasInput");
     const r = document.getElementById("ritmoCompraInput");
+    const a = document.getElementById("aniosCalendarioInput");
     if (document.activeElement !== h) h.value = state.inp.horasEfectivas;
     if (document.activeElement !== r) r.value = state.inp.ritmoCompra;
+    if (document.activeElement !== a) a.value = state.inp.aniosCalendario;
   }
 
   // ---------- tabs ----------
@@ -681,7 +707,7 @@
   function buildCohortTableShell() {
     const table = document.getElementById("cohortTable");
     const rowsHtml = [];
-    for (let anio = 0; anio < COHORT_ROWS; anio++) {
+      for (let anio = 0; anio < state.inp.aniosCalendario; anio++) {
       rowsHtml.push(`<tr>
         <td style="text-align:left;">Año ${anio}</td>
         <td style="text-align:right;"><input type="number" class="cohort-input" data-anio="${anio}" min="0" step="1" inputmode="numeric"></td>
@@ -745,8 +771,11 @@
 
     renderTabs();
     updateEquipCard(res);
+    if (lastBuiltAnios !== state.inp.aniosCalendario) {
+      buildCohortTableShell();
+      lastBuiltAnios = state.inp.aniosCalendario;
+    }
     updateCohortTableValues(res);
-
     // verdict
     const esRentable = res.van > 0 && res.tir !== null && res.tir > state.inp.tasaDescuento;
     const verdictEl = document.getElementById("verdict");
@@ -877,7 +906,7 @@
   document.getElementById("regenBtn").addEventListener("click", () => {
     const key = state.equipoKey;
     const sugeridas = suggestedUnidades(key);
-    state.equipos[key].cohortes = buildCohortesPadded(sugeridas, state.inp.ritmoCompra, COHORT_ROWS);
+    state.equipos[key].cohortes = buildCohortesPadded(sugeridas, state.inp.ritmoCompra, state.inp.aniosCalendario);
     render();
   });
 
