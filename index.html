@@ -84,7 +84,16 @@
     background: linear-gradient(135deg, var(--primary-dark), #123354 70%, var(--primary));
     padding-block: 28px 30px;
   }
-  .hero-inner { max-width: 1140px; margin: 0 auto; }
+  .hero-inner {
+  max-width: 1140px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  }
+  .hero-text { min-width: 0; }
+  .hero-logo { height: 54px; width: auto; flex: none; display: block; }
+  @media (max-width: 640px) {
+    .hero-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
+    .hero-logo { height: 38px; }
+  }
   .hero-eyebrow {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
@@ -227,9 +236,12 @@
 <body>
 <div class="hero gutter">
   <div class="hero-inner">
-    <span class="hero-eyebrow">MPM · Servicio Chancado Móvil de Pebbles </span>
-    <h1>Calculadora de Factibilidad Técnico-Económica</h1>
-    <p>Elige el equipo, ajusta los supuestos del modelo y revisa en vivo el VAN, la TIR y el payback del flujo de caja. Pensada para probar escenarios de sensibilidad y para mostrar en vivo en la presentación final.</p>
+    <div class="hero-text">
+      <span class="hero-eyebrow">MPM · Servicio Chancado Móvil de Pebbles · Teck Quebrada Blanca</span>
+      <h1>Calculadora de Factibilidad Técnico-Económica</h1>
+      <p>Elige el equipo, ajusta los supuestos del modelo y revisa en vivo el VAN, la TIR y el payback del flujo de caja. Pensada para probar escenarios de sensibilidad (Objetivo 6) y para mostrar en vivo en la presentación final.</p>
+    </div>
+    <img class="hero-logo" alt="Logo MPM - Mantención Proyectos Montajes" src="data:image/png;base64,[iVBORw0KGgoAAAANSUhEUgAAAeAAAACTCAMAAABhyzp8AAAASFBMVEWlqI90]">
   </div>
 </div>
 
