@@ -1,7 +1,6 @@
 <!doctype html>
 <html lang="es">
 <head>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Calculadora de Factibilidad — Chancado de Pebbles MPM</title>
@@ -9,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Librería Chart.js para el gráfico de Monte Carlo -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   :root {
     --bg: #F5F9F3;
@@ -253,7 +254,6 @@
 </head>
 <body>
 
-
 <div class="hero gutter">
   <div class="hero-inner">
     <div class="hero-text">
@@ -346,7 +346,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="margin-bottom:18px;">
         <details>
           <summary>5 · Flujo de caja detallado (ver cuadro completo)</summary>
           <div style="margin-top:12px;" class="table-scroll">
@@ -354,6 +354,46 @@
           </div>
         </details>
       </div>
+
+      <!-- NUEVA SECCIÓN: ANÁLISIS DE RIESGO ESTOCÁSTICO (MONTE CARLO) -->
+      <section class="card">
+        <div class="section-title">6 · Análisis de Riesgo y Simulación (Monte Carlo)</div>
+        <div class="section-sub">Ejecuta 10.000 iteraciones variando de forma estocástica los ingresos y costos operativos para evaluar la incertidumbre del VAN.</div>
+        
+        <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;">
+          <button class="reset-btn" id="btnMonteCarlo" type="button" style="max-width: 280px; background: var(--primary); color: white;">
+            Ejecutar Simulación de Riesgo (10k)
+          </button>
+          <div id="mcStatus" style="font-size: 12.5px; color: var(--muted);">Haz clic para calcular la distribución probabilística.</div>
+        </div>
+
+        <!-- Tarjetas de resultados de riesgo -->
+        <div class="stat-row" id="mcStatRow" style="margin-bottom: 14px;">
+          <div class="stat-card">
+            <div class="label">VAN Esperado (P50)</div>
+            <div class="value" id="mcP50">—</div>
+            <div class="sub">Mediana de escenarios</div>
+          </div>
+          <div class="stat-card good">
+            <div class="label">VAN Conservador (P10)</div>
+            <div class="value" id="mcP10">—</div>
+            <div class="sub">90% de certeza de superar</div>
+          </div>
+          <div class="stat-card bad">
+            <div class="label">Probabilidad de Pérdida</div>
+            <div class="value" id="mcProb">—</div>
+            <div class="sub">Casos con VAN &lt; 0</div>
+          </div>
+        </div>
+
+        <!-- Gráfico de distribución -->
+        <div class="chart-wrap" style="background: var(--surface-2); border-radius: 10px; padding: 12px;">
+          <div style="height: 220px; position: relative;">
+            <canvas id="mcChart"></canvas>
+          </div>
+        </div>
+      </section>
+
     </section>
   </div>
 
@@ -370,7 +410,6 @@
 (function(){
 
   // ---------- financial engine: leasing 100%, validado contra Flujo_de_Caja_Leasing_2_TATY.xlsx ----------
-  // (Trakpactor con ritmo de compra 2/año y 11 unidades: VAN 22.317.442.690,07 / TIR 48,1432%)
   function npvAt(flujos, r) { return flujos.reduce((acc,f,i)=> acc + f/Math.pow(1+r,i), 0); }
   function computeIRR(flujos) {
     let lo=-0.99, hi=10, fLo=npvAt(flujos,lo), fHi=npvAt(flujos,hi);
@@ -392,9 +431,6 @@
     return null;
   }
 
-  // calendario de compra sugerido: N equipos por año hasta completar la flota (punto de partida editable)
-  // la ventana de años (cuántas filas tiene la tabla) es también un supuesto editable (ver state.inp.aniosCalendario);
-  // esta constante solo fija el valor por defecto al cargar la página o al "Restablecer valores validados".
   const COHORT_ROWS_DEFAULT = 10;
   function buildCohortesAuto(totalUnidades, ritmo) {
     const r = Math.max(1, Math.round(ritmo) || 1);
@@ -415,7 +451,6 @@
     return padded;
   }
 
-  // cuadro de amortización de UNA unidad en leasing (cuota constante, residual al final)
   function computeAmortLeasing(valorEquipo, pctResidual, tasaInteres, plazo) {
     const valorResidual = valorEquipo * pctResidual;
     const cuota = (valorEquipo - valorResidual * Math.pow(1+tasaInteres, -plazo)) * tasaInteres / (1 - Math.pow(1+tasaInteres, -plazo));
@@ -448,12 +483,13 @@
     return Math.max(1, Math.ceil((state.inp.capacidadPlena / state.inp.horasEfectivas) / eq.tphUnidad));
   }
 
-  function computeLeasingFlujo(equipoKey) {
+  // Hacemos accesible globalmente la función del motor de flujos para usarla en Monte Carlo
+  window.computeLeasingFlujo = function(equipoKey) {
     const inp = state.inp;
     const eq = state.equipos[equipoKey];
     const valorEquipo = equipoValorCLP(equipoKey);
 
-    const cohortesBase = eq.cohortes; // cantidad por año es editable por la usuaria
+    const cohortesBase = eq.cohortes; 
     const compradas = cohortesBase.filter(c => c.cantidad > 0);
     const horizonte = compradas.length ? (compradas[compradas.length-1].anio + inp.plazoLeasing) : inp.plazoLeasing;
 
@@ -504,9 +540,8 @@
     const payback = computePayback(flujos);
 
     return { equipoKey, valorEquipo, unidades: totalEquipos, horizonte, flota, totalEquipos, totalValorLibro, totalCapex, amort, rows, flujos, van, tir, payback, capTrabajoMonto };
-  }
+  };
 
-  // ---------- defaults (valores validados del modelo) ----------
   const DEFAULTS_INP = {
     capacidadPlena: 12894804,
     tarifa: 2990.93,
@@ -539,12 +574,12 @@
   };
   const EQUIP_ORDER = ["trakpactor", "astec", "rm120x"];
 
-  let state = {
+  window.state = {
     equipoKey: "trakpactor",
     inp: JSON.parse(JSON.stringify(DEFAULTS_INP)),
     equipos: JSON.parse(JSON.stringify(DEFAULTS_EQUIPOS)),
   };
-  let lastBuiltAnios = null; // rastrea la ventana de años con la que se construyó la tabla, para reconstruirla solo cuando cambia
+  let lastBuiltAnios = null;
 
   function equipoValorCLP(key) {
     const eq = state.equipos[key];
@@ -553,16 +588,13 @@
     return eq.precioNativo;
   }
 
-  // ---------- formatting ----------
   const fmtCLP = n => "$ " + Math.round(n).toLocaleString("es-CL");
   const fmtCLPmm = n => (n/1e6).toLocaleString("es-CL",{maximumFractionDigits:0}) + " MM";
   const fmtPct = n => (n*100).toLocaleString("es-CL",{maximumFractionDigits:2,minimumFractionDigits:2}) + "%";
   const fmtNum = n => Math.round(n).toLocaleString("es-CL");
-  // separador de puntos para valores grandes editables (CLP/ton sin decimales) — formatea y permite parsear de vuelta
   const formatThousands = n => Math.round(n || 0).toLocaleString("es-CL");
   const parseDigits = str => { const d = str.replace(/\D/g, ""); return d === "" ? 0 : parseInt(d, 10); };
 
-  // ---------- field definitions (supuestos compartidos) ----------
   const FIELD_GROUPS = [
     { legend: "Mercado", fields: [
       { key:"capacidadPlena", label:"Capacidad plena", hint:"ton/año, flota completa", step:1000, thousands:true },
@@ -636,7 +668,6 @@
     render();
   }
 
-  // ---------- masked thousands-separator input: formatea en vivo (742.050.000) y conserva la posición del cursor ----------
   function maskedThousandsInput(e, setter) {
     const input = e.target;
     const cursorPos = input.selectionStart;
@@ -671,7 +702,6 @@
     });
   }
 
-  // ---------- static listeners for schedule + equip-card inputs (built once, never rebuilt, to keep focus while typing) ----------
   document.getElementById("horasEfectivasInput").addEventListener("input", (e) => {
     let v = parseFloat(e.target.value);
     if (isNaN(v) || v <= 0) return;
@@ -702,8 +732,6 @@
     render();
   });
 
-  // ajusta el largo de la tabla de calendario (en todos los equipos) cuando cambia la ventana de años;
-  // conserva las cantidades de los años que siguen dentro de la ventana y rellena con 0 los años nuevos
   function resizeAllCohortes(newLength) {
     EQUIP_ORDER.forEach(key => {
       const old = state.equipos[key].cohortes;
@@ -723,7 +751,6 @@
     if (document.activeElement !== a) a.value = state.inp.aniosCalendario;
   }
 
-  // ---------- tabs ----------
   function renderTabs() {
     const tabs = document.getElementById("equipTabs");
     tabs.innerHTML = EQUIP_ORDER.map(key => {
@@ -735,7 +762,6 @@
     });
   }
 
-  // ---------- equip card (static shell, values-only update to preserve input focus) ----------
   function updateEquipCard(res) {
     const key = state.equipoKey;
     const eq = state.equipos[key];
@@ -752,7 +778,6 @@
     document.getElementById("eqAvail").textContent = eq.disponibilidad;
   }
 
-  // ---------- cohort / purchase-schedule table (cantidad editable por año, shell estático + sync de valores para no perder foco) ----------
   function buildCohortTableShell() {
     const table = document.getElementById("cohortTable");
     const rowsHtml = [];
@@ -809,7 +834,6 @@
       : `Definiste ${res.unidades} equipo(s) en total entre el año 0 y el año ${ultimoAnio}, es decir ${comparacion}. El horizonte de evaluación llega al año ${res.horizonte} — cuando cierra el leasing del último equipo comprado. Este calendario es solo un punto de partida: en futuros proyectos, edita libremente cuántos equipos se compran cada año.`;
   }
 
-  // ---------- results ----------
   function render() {
     syncFormValues();
     syncScheduleInputs();
@@ -826,7 +850,6 @@
     }
     updateCohortTableValues(res);
 
-    // verdict
     const esRentable = res.van > 0 && res.tir !== null && res.tir > state.inp.tasaDescuento;
     const verdictEl = document.getElementById("verdict");
     verdictEl.innerHTML = `<div class="verdict ${esRentable?'ok':'no'}"><span class="dot"></span>
@@ -835,7 +858,6 @@
         : `Proyecto no rentable con los supuestos actuales (VAN ${res.van>0?'positivo':'negativo'}${res.tir!==null?`, TIR ${fmtPct(res.tir)}`:''}).`}
       </div>`;
 
-    // stat cards
     const statRow = document.getElementById("statRow");
     statRow.innerHTML = `
       <div class="stat-card ${res.van>0?'good':'bad'}">
@@ -855,7 +877,6 @@
       </div>
     `;
 
-    // chart (años 0..horizonte del equipo seleccionado)
     const chart = document.getElementById("chart");
     const maxAbs = Math.max(...res.flujos.map(f=>Math.abs(f)));
     chart.innerHTML = `<div class="zero-line" style="bottom:${ (res.flujos.some(f=>f<0) ? (Math.max(...res.flujos)/(maxAbs*2))*100 : 0) }%"></div>` +
@@ -878,7 +899,6 @@
       <span class="pill">Verde = año final (+ capital de trabajo + valor residual)</span>
       <span class="pill">Montos en millones de CLP</span>`;
 
-    // comparación rápida entre los tres equipos
     const compTable = document.getElementById("compTable");
     const vans = EQUIP_ORDER.map(k=>allResults[k].van);
     const tirsValidos = EQUIP_ORDER.map(k=>allResults[k].tir).filter(t=>t!==null);
@@ -903,7 +923,6 @@
         }).join("")}
       </tbody>`;
 
-    // cuadro de amortización (1 unidad del equipo seleccionado)
     const amortTable = document.getElementById("amortTable");
     amortTable.innerHTML = `
       <thead><tr><th>N° cuota</th><th>Saldo inicial</th><th>Cuota</th><th>Interés</th><th>Amortización</th><th>Saldo final</th></tr></thead>
@@ -918,7 +937,6 @@
         </tr>`).join("")}
       </tbody>`;
 
-    // flujo detail table (los negativos se pintan en rojo para que se note la diferencia de un vistazo)
     const flujoTable = document.getElementById("flujoTable");
     const rows = res.rows;
     const negCell = (v, fmt=fmtCLP) => `<td${v<0?' style="color:var(--red)"':''}>${fmt(v)}</td>`;
@@ -965,154 +983,101 @@
   render();
 })();
 </script>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Calculadora de Factibilidad — Chancado de Pebbles MPM</title>
-    <meta name="description" content="...">
-    <!-- Cargar librerías externas aquí arriba -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<!-- NUEVA SECCIÓN: ANÁLISIS DE RIESGO ESTOCÁSTICO (MONTE CARLO) -->
-  <section class="card" style="margin-top: 18px;">
-    <div class="section-title">6 · Análisis de Riesgo y Simulación (Monte Carlo)</div>
-    <div class="section-sub">Ejecuta 10.000 iteraciones variando de forma estocástica los ingresos y costos operativos para evaluar la incertidumbre del VAN.</div>
-    
-    <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;">
-      <button class="reset-btn" id="btnMonteCarlo" type="button" style="max-width: 280px; background: var(--primary); color: white;">
-        Ejecutar Simulación de Riesgo (10k)
-      </button>
-      <div id="mcStatus" style="font-size: 12.5px; color: var(--muted);">Haz clic para calcular la distribución probabilística.</div>
-    </div>
 
-    <!-- Tarjetas de resultados de riesgo -->
-    <div class="stat-row" id="mcStatRow" style="margin-bottom: 14px;">
-      <div class="stat-card">
-        <div class="label">VAN Esperado (P50)</div>
-        <div class="value" id="mcP50">—</div>
-        <div class="sub">Mediana de escenarios</div>
-      </div>
-      <div class="stat-card good">
-        <div class="label">VAN Conservador (P10)</div>
-        <div class="value" id="mcP10">—</div>
-        <div class="sub">90% de certeza de superar</div>
-      </div>
-      <div class="stat-card bad">
-        <div class="label">Probabilidad de Pérdida</div>
-        <div class="value" id="mcProb">—</div>
-        <div class="sub">Casos con VAN &lt; 0</div>
-      </div>
-    </div>
+<!-- SCRIPT PARA INTEGRAR MONTE CARLO CON EL MOTOR ACTUAL -->
+<script>
+let mcChartInstance = null;
 
-    <!-- Gráfico de distribución -->
-    <div class="chart-wrap" style="background: var(--surface-2); border-radius: 10px; padding: 12px;">
-      <canvas id="mcChart" style="max-height: 220px; width: 100%;"></canvas>
-    </div>
-  </section>
+document.getElementById("btnMonteCarlo").addEventListener("click", () => {
+  const statusEl = document.getElementById("mcStatus");
+  statusEl.textContent = "Calculando 10.000 iteraciones...";
+  
+  setTimeout(() => {
+    const nSim = 10000;
+    const resultadosVan = [];
+    const tasaDescuento = window.state.inp.tasaDescuento;
 
-  <!-- SCRIPT PARA INTEGRAR MONTE CARLO CON EL MOTOR ACTUAL -->
-  <script>
-  let mcChartInstance = null;
+    function randomNormal(mean, std) {
+      let u = 0, v = 0;
+      while(u === 0) u = Math.random();
+      while(v === 0) v = Math.random();
+      let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      return num * std + mean;
+    }
 
-  document.getElementById("btnMonteCarlo").addEventListener("click", () => {
-    const statusEl = document.getElementById("mcStatus");
-    statusEl.textContent = "Calculando 10.000 iteraciones...";
-    
-    setTimeout(() => {
-      // 1. Tomamos los flujos base que está calculando la página para el equipo seleccionado
-      // (Podemos reutilizar la lógica interna llamando al motor con los flujos actuales)
-      // Como alternativa directa, extraemos los flujos de la tabla o recalculamos:
-      const nSim = 10000;
-      const resultadosVan = [];
-      const tasaDescuento = state.inp.tasaDescuento;
+    const resBase = window.computeLeasingFlujo(window.state.equipoKey);
+    const baseFc = resBase.flujos;
 
-      // Generador normal (Box-Muller)
-      function randomNormal(mean, std) {
-        let u = 0, v = 0;
-        while(u === 0) u = Math.random();
-        while(v === 0) v = Math.random();
-        let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-        return num * std + mean;
+    for (let i = 0; i < nSim; i++) {
+      let factorOperativo = randomNormal(1.0, 0.08);
+      let fcSim = baseFc.map((val, idx) => idx === 0 ? val : val * factorOperativo);
+      
+      let vanSim = 0;
+      for (let t = 0; t < fcSim.length; t++) {
+        vanSim += fcSim[t] / Math.pow(1 + tasaDescuento, t);
       }
+      resultadosVan.push(vanSim);
+    }
 
-      // Obtenemos los flujos base del equipo activo actual
-      // (Asumiendo que computeLeasingFlujo está disponible en el scope principal)
-      const resBase = computeLeasingFlujo(state.equipoKey);
-      const baseFc = resBase.flujos;
+    resultadosVan.sort((a, b) => a - b);
 
-      for (let i = 0; i < nSim; i++) {
-        // Variación estocástica de un 8% en los flujos operativos (años 1 en adelante)
-        let factorOperativo = randomNormal(1.0, 0.08);
-        let fcSim = baseFc.map((val, idx) => idx === 0 ? val : val * factorOperativo);
-        
-        let vanSim = 0;
-        for (let t = 0; t < fcSim.length; t++) {
-          vanSim += fcSim[t] / Math.pow(1 + tasaDescuento, t);
-        }
-        resultadosVan.push(vanSim);
-      }
+    const p50 = resultadosVan[Math.floor(nSim * 0.50)];
+    const p10 = resultadosVan[Math.floor(nSim * 0.10)]; 
+    const probPerdida = (resultadosVan.filter(v => v < 0).length / nSim) * 100;
 
-      resultadosVan.sort((a, b) => a - b);
+    document.getElementById("mcP50").textContent = (p50 / 1e6).toFixed(0) + " MM";
+    document.getElementById("mcP10").textContent = (p10 / 1e6).toFixed(0) + " MM";
+    document.getElementById("mcProb").textContent = probPerdida.toFixed(1) + "%";
+    statusEl.textContent = "Simulación completada con éxito (10.000 iteraciones).";
 
-      const p50 = resultadosVan[Math.floor(nSim * 0.50)];
-      const p10 = resultadosVan[Math.floor(nSim * 0.10)]; // 90% certeza
-      const p90 = resultadosVan[Math.floor(nSim * 0.90)];
-      const probPerdida = (resultadosVan.filter(v => v < 0).length / nSim) * 100;
+    let binsCount = 35;
+    let minVal = resultadosVan[0];
+    let maxVal = resultadosVan[resultadosVan.length - 1];
+    let binWidth = (maxVal - minVal) / binsCount;
+    let bins = new Array(binsCount).fill(0);
+    let binLabels = [];
 
-      // Mostrar en tarjetas
-      document.getElementById("mcP50").textContent = (p50 / 1e6).toFixed(0) + " MM";
-      document.getElementById("mcP10").textContent = (p10 / 1e6).toFixed(0) + " MM";
-      document.getElementById("mcProb").textContent = probPerdida.toFixed(1) + "%";
-      statusEl.textContent = "Simulación completada con éxito (10.000 iteraciones).";
-
-      // Preparar histograma para Chart.js
-      let binsCount = 35;
-      let minVal = resultadosVan[0];
-      let maxVal = resultadosVan[resultadosVan.length - 1];
-      let binWidth = (maxVal - minVal) / binsCount;
-      let bins = new Array(binsCount).fill(0);
-      let binLabels = [];
-
-      for (let i = 0; i < binsCount; i++) {
-        let bStart = minVal + i * binWidth;
-        let bEnd = bStart + binWidth;
-        binLabels.push(((bStart + bEnd) / 2 / 1e6).toFixed(0) + "M");
-        for (let val of resultadosVan) {
-          if (val >= bStart && (i === binsCount - 1 ? val <= bEnd : val < bEnd)) {
-            bins[i]++;
-          }
+    for (let i = 0; i < binsCount; i++) {
+      let bStart = minVal + i * binWidth;
+      let bEnd = bStart + binWidth;
+      binLabels.push(((bStart + bEnd) / 2 / 1e6).toFixed(0) + "M");
+      for (let val of resultadosVan) {
+        if (val >= bStart && (i === binsCount - 1 ? val <= bEnd : val < bEnd)) {
+          bins[i]++;
         }
       }
+    }
 
-      const ctx = document.getElementById("mcChart").getContext("2d");
-      if (mcChartInstance) mcChartInstance.destroy();
+    const ctx = document.getElementById("mcChart").getContext("2d");
+    if (mcChartInstance) mcChartInstance.destroy();
 
-      mcChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: binLabels,
-          datasets: [{
-            data: bins,
-            backgroundColor: '#497734',
-            borderRadius: 3
-          }]
+    mcChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: binLabels,
+        datasets: [{
+          data: bins,
+          backgroundColor: '#497734',
+          borderRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Distribución de Probabilidad del VAN (Millones de CLP)' }
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            title: { display: true, text: 'Distribución de Probabilidad del VAN (Millones de CLP)' }
-          },
-          scales: {
-            x: { grid: { display: false }, title: { display: true, text: 'VAN (MM CLP)' } },
-            y: { grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Frecuencia' } }
-          }
+        scales: {
+          x: { grid: { display: false }, title: { display: true, text: 'VAN (MM CLP)' } },
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Frecuencia' } }
         }
-      });
+      }
+    });
 
-    }, 50);
-  });
-  </script>
+  }, 50);
+});
+</script>
+
 </body>
 </html>
